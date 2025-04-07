@@ -49,8 +49,20 @@ class ReminderBot:
     def __init__(self, token):
         self.token = token
         self.persistence = PicklePersistence(filepath='reminder_bot_data')
-        self.application = Application.builder().token(token).persistence(self.persistence).build()
-        self.scheduler = AsyncIOScheduler()
+        self.application = Application.builder() \
+    .token(token) \
+    .persistence(self.persistence) \
+    .read_timeout(30) \
+    .connect_timeout(30) \
+    .pool_timeout(30) \
+    .build()
+        self.scheduler = AsyncIOScheduler(
+            job_defaults={
+        'misfire_grace_time': 60*60,  # 1 час
+        'coalesce': True,
+        'max_instances': 1
+    }
+        )
 
         # Регистрация обработчиков команд
         self.application.add_handler(CommandHandler("start", self.start))
@@ -238,24 +250,33 @@ class ReminderBot:
                     
 
     def run(self):
-        """Запускает бота"""
+        """Запускает бота с обработкой ошибок"""
         self.scheduler.start()
-
-        # Создаем новую event loop для Jupyter
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
+        
         try:
-            loop.run_until_complete(self.application.run_polling())
+            # Убедимся, что вебхук удален
+            asyncio.get_event_loop().run_until_complete(
+                self.application.bot.delete_webhook(drop_pending_updates=True)
+            )
+            
+            # Запускаем polling с обработкой ошибок
+            self.application.run_polling(
+                close_loop=False,
+                stop_signals=None,
+                allowed_updates=None,
+                drop_pending_updates=True
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при работе бота: {e}")
         finally:
-            loop.close()
+            self.scheduler.shutdown()
 
 if __name__ == '__main__':
     # Установите nest-asyncio для Jupyter
     !pip install nest-asyncio
 
     # Прямая передача токена
-    token = 'TELEGRAM_BOT_TOKEN'
+    token = 'TELEGRAM_TOKEN'
 
     bot = ReminderBot(token)
     bot.run()
