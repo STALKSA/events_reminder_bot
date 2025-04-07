@@ -190,7 +190,7 @@ class ReminderBot:
       logger.info(f"Проверка напоминаний на {today}")
 
       try:
-          # Получаем данные без использования async with
+          
           bot_data = self.application.bot_data
         
           if 'chat_ids' not in bot_data or not bot_data['chat_ids']:
